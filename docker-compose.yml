@@ -1,0 +1,13 @@
+services:
+  local-m3u-addon:
+    build: .
+    container_name: local-m3u-addon
+    ports:
+      - "7000:7000"
+    environment:
+      ADDON_NAME: "My Local Add-on"
+      ADDON_ID: "local.m3u.addon"
+      PLAYLIST_PATH: "/data/playlist.m3u8"
+    volumes:
+      - ./playlists/local.m3u8:/data/playlist.m3u8:ro
+    restart: unless-stopped

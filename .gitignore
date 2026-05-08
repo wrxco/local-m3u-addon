@@ -1,0 +1,5 @@
+node_modules/
+logs/
+reports/
+.DS_Store
+docs/receipt-printer-plan.md
