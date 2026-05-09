@@ -14,6 +14,8 @@ const CATALOG_ID = process.env.CATALOG_ID || "local_channels";
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 100);
 const STATIC_DIR = path.resolve(process.env.STATIC_DIR || "resources");
 const STATIC_PATH_PREFIX = normalizePathPrefix(process.env.STATIC_PATH_PREFIX || "/resources");
+const MANIFEST_PATH = process.env.MANIFEST_PATH ? path.resolve(process.env.MANIFEST_PATH) : "";
+const MANIFEST_OVERRIDE = await loadManifestOverride();
 
 let cache = {
   mtimeMs: 0,
@@ -92,7 +94,7 @@ async function loadPlaylist() {
 
 function manifest(entries) {
   const genres = [...new Set(entries.map((entry) => entry.group).filter(Boolean))].sort();
-  return {
+  return applyManifestOverride({
     id: ADDON_ID,
     version: "0.1.0",
     name: ADDON_NAME,
@@ -115,7 +117,7 @@ function manifest(entries) {
         ]
       }
     ]
-  };
+  });
 }
 
 function catalog(entries, searchParams) {
@@ -221,4 +223,59 @@ function contentType(filePath) {
     ".svg": "image/svg+xml; charset=utf-8",
     ".webp": "image/webp"
   }[extension] || "application/octet-stream";
+}
+
+function applyManifestOverride(baseManifest) {
+  if (!MANIFEST_OVERRIDE) return baseManifest;
+
+  const imported = pickFields(MANIFEST_OVERRIDE, [
+    "id",
+    "version",
+    "name",
+    "description",
+    "logo",
+    "background",
+    "contactEmail",
+    "behaviorHints"
+  ]);
+
+  if (Array.isArray(MANIFEST_OVERRIDE.catalogs) && MANIFEST_OVERRIDE.catalogs[0]) {
+    imported.catalogs = [
+      {
+        ...baseManifest.catalogs[0],
+        ...pickFields(MANIFEST_OVERRIDE.catalogs[0], ["name"])
+      }
+    ];
+  }
+
+  return {
+    ...baseManifest,
+    ...imported,
+    resources: baseManifest.resources,
+    types: baseManifest.types,
+    catalogs: imported.catalogs || baseManifest.catalogs
+  };
+}
+
+function pickFields(source, keys) {
+  return Object.fromEntries(
+    keys
+      .filter((key) => typeof source[key] === "string" || isPlainObject(source[key]))
+      .map((key) => [key, source[key]])
+  );
+}
+
+function isPlainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value);
+}
+
+async function loadManifestOverride() {
+  if (!MANIFEST_PATH) return null;
+
+  try {
+    return JSON.parse(await fs.readFile(MANIFEST_PATH, "utf8"));
+  } catch (error) {
+    console.warn(`Could not load manifest override from ${MANIFEST_PATH}: ${error.message}`);
+    return null;
+  }
 }

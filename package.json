@@ -7,10 +7,12 @@
   "scripts": {
     "start": "node src/server.js",
     "audit": "node bin/audit-playlist.js",
+    "import-manifest": "node bin/import-manifest.js",
     "test": "node --test"
   },
   "bin": {
-    "audit-playlist": "./bin/audit-playlist.js"
+    "audit-playlist": "./bin/audit-playlist.js",
+    "import-manifest": "./bin/import-manifest.js"
   },
   "engines": {
     "node": ">=18"

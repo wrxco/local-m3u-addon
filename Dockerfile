@@ -8,6 +8,7 @@ ENV PORT=7000
 ENV PLAYLIST_PATH=/data/playlist.m3u8
 ENV STATIC_DIR=/data/resources
 ENV STATIC_PATH_PREFIX=/resources
+ENV MANIFEST_PATH=
 ENV ADDON_NAME="Local M3U Add-on"
 
 COPY package*.json ./

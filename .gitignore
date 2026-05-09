@@ -1,6 +1,7 @@
 node_modules/
 logs/
 reports/
+config/*.local.json
 playlists/local*.m3u8
 resources/
 .DS_Store

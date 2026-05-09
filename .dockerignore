@@ -3,5 +3,6 @@
 node_modules
 logs
 reports
+config/*.local.json
 resources
 *.log

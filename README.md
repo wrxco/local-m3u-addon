@@ -89,8 +89,35 @@ Environment variables:
 | `PAGE_SIZE` | `100` | Number of catalog items returned per page. |
 | `STATIC_DIR` | `resources` locally, `/data/resources` in Docker | Optional directory of static files to serve, such as local channel logos. |
 | `STATIC_PATH_PREFIX` | `/resources` | URL path prefix for static files. |
+| `MANIFEST_PATH` | unset | Optional JSON file with imported manifest branding overrides. |
 
 The playlist is reloaded when the file changes.
+
+## Manifest Import
+
+You can import presentation metadata from an existing add-on manifest and serve it as your local add-on's own manifest branding:
+
+```sh
+npm run import-manifest -- https://example.com/manifest.json \
+  --out config/manifest.local.json
+```
+
+The generated `config/manifest.local.json` is ignored by Git. It can override safe branding fields such as `id`, `name`, `description`, `logo`, `background`, `contactEmail`, `behaviorHints`, and the catalog display name. Routes, resource types, and catalog IDs still come from this local server so the manifest only advertises endpoints that actually exist.
+
+To use it locally:
+
+```sh
+MANIFEST_PATH=config/manifest.local.json npm start
+```
+
+To use it in Docker, mount the imported file and set `MANIFEST_PATH`:
+
+```yaml
+environment:
+  MANIFEST_PATH: /data/manifest.json
+volumes:
+  - /absolute/path/to/config/manifest.local.json:/data/manifest.json:ro
+```
 
 ## Static Resources
 
