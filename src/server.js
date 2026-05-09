@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { parseM3u } from "./m3u.js";
+import crypto from "node:crypto";
 
 const PORT = Number(process.env.PORT || 7000);
 const HOST = process.env.HOST || "127.0.0.1";
@@ -58,7 +59,7 @@ const server = http.createServer(async (req, res) => {
       const [, type, id] = streamMatch;
       if (!supportsType(type, entries)) return json(res, { streams: [] });
       const entry = cache.byId.get(resolveEntryId(decodeURIComponent(id), type, entries));
-      return json(res, { streams: entry ? [toStream(entry)] : [] });
+      return json(res, { streams: entry ? toStream(entry) : [] });
     }
 
     if (url.pathname === "/health.json") {
@@ -86,7 +87,7 @@ async function loadPlaylist() {
   if (stat.mtimeMs === cache.mtimeMs) return cache.entries;
 
   const text = await fs.readFile(PLAYLIST_PATH, "utf8");
-  const entries = parseM3u(text);
+  const entries = groupChannels(parseM3u(text));
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
   const groups = [...new Set(entries.map((entry) => entry.group).filter(Boolean))].sort();
   cache = { mtimeMs: stat.mtimeMs, entries, byId, groups };
@@ -147,7 +148,7 @@ function toPreview(entry, type = ADDON_TYPE, entries = cache.entries) {
     name: entry.name,
     poster: entry.logo || undefined,
     logo: entry.logo || undefined,
-    genres: entry.group ? [entry.group] : undefined
+    genres: entry.genres?.length ? entry.genres : entry.group ? [entry.group] : undefined
   };
 }
 
@@ -161,10 +162,12 @@ function toMeta(entry, type = ADDON_TYPE, entries = cache.entries) {
 }
 
 function toStream(entry) {
-  return {
-    title: entry.group ? `${entry.group} - ${entry.name}` : entry.name,
-    url: entry.url
-  };
+  return entry.streams.map((stream) => ({
+    title: stream.title,
+    url: stream.url,
+    quality: stream.quality,
+    description: stream.description
+  }));
 }
 
 function json(res, body, status = 200) {
@@ -299,8 +302,10 @@ function catalogGroupForId(catalogId, entries) {
 }
 
 function matchesGenre(entry, genre, catalogGroup) {
-  if (entry.group === genre) return true;
-  if (catalogGroup && entry.group === catalogGroup) return true;
+  const normalizedGenre = normalizeToken(genre);
+  if (!normalizedGenre) return true;
+  if (entry.genres?.some((item) => normalizeToken(item) === normalizedGenre)) return true;
+  if (!catalogGroup && normalizeToken(entry.group) === normalizedGenre) return true;
   return false;
 }
 
@@ -340,4 +345,100 @@ async function loadManifestOverride() {
     console.warn(`Could not load manifest override from ${MANIFEST_PATH}: ${error.message}`);
     return null;
   }
+}
+
+function groupChannels(entries) {
+  const grouped = new Map();
+
+  for (const entry of entries) {
+    const key = channelKey(entry);
+    const baseName = channelName(entry.name);
+    const existing = grouped.get(key);
+    const stream = toChannelStream(entry, baseName);
+
+    if (existing) {
+      existing.streams.push(stream);
+      existing.sourceNames.push(entry.name);
+      existing.genres = mergeGenres(existing.genres, channelGenres(entry));
+      continue;
+    }
+
+    grouped.set(key, {
+      id: stableId(key),
+      name: baseName,
+      group: entry.group,
+      logo: entry.logo,
+      attributes: entry.attributes,
+      sourceNames: [entry.name],
+      genres: channelGenres(entry),
+      streams: [stream],
+      line: entry.line
+    });
+  }
+
+  return [...grouped.values()];
+}
+
+function channelKey(entry) {
+  const tvgId = entry.attributes["tvg-id"] || "";
+  const tvgName = entry.attributes["tvg-name"] || "";
+  return [
+    normalizeToken(entry.group),
+    normalizeToken(tvgId || tvgName || channelName(entry.name)),
+    normalizeToken(entry.logo)
+  ].join("|");
+}
+
+function channelName(name) {
+  return name
+    .replace(/\s+-\s+(?:tvpass\s+)?(?:arion\s+)?(?:hd|sd|fhd|uhd|4k)\b.*$/i, "")
+    .replace(/\s+\((?:hd|sd|fhd|uhd|4k)\)$/i, "")
+    .trim() || name;
+}
+
+function toChannelStream(entry, baseName) {
+  const variant = entry.name.replace(baseName, "").replace(/^\s+-\s*/, "").trim();
+  const quality = streamQuality(entry.name);
+  return {
+    title: variant || quality || "Default",
+    url: entry.url,
+    quality,
+    description: quality || undefined
+  };
+}
+
+function streamQuality(name) {
+  if (/\b(?:4k|uhd)\b/i.test(name)) return "4K";
+  if (/\bfhd\b/i.test(name)) return "1080p";
+  if (/\bhd\b/i.test(name)) return "720p";
+  if (/\bsd\b/i.test(name)) return "480p";
+  return undefined;
+}
+
+function channelGenres(entry) {
+  const text = `${entry.name} ${entry.attributes["tvg-id"] || ""} ${entry.attributes["tvg-name"] || ""}`;
+  const genres = [];
+
+  if (/\b(kids|pbs\.kids|nick|disney|cartoon|boomerang|family)\b/i.test(text)) genres.push("Kids");
+  if (/\b(news|cnbc|cnn|fox news|weather)\b/i.test(text)) genres.push("News");
+  if (/\b(sports|espn|nfl|nba|mlb|nhl|tennis|golf|willow)\b/i.test(text)) genres.push("Sports");
+  if (/\b(movie|movies|cinema|hbo|showtime|starz|cinemax|hallmark)\b/i.test(text)) genres.push("Movies");
+  if (/\b(documentary|documentaries|history|science|nat ?geo|smithsonian)\b/i.test(text)) genres.push("Documentaries");
+  if (/\b(music|mtv|vh1|cmt)\b/i.test(text)) genres.push("Music");
+  if (/\b(crime|court|investigation)\b/i.test(text)) genres.push("Crime");
+  if (/\b(food|travel|home|hgtv|diy|lifestyle|tlc)\b/i.test(text)) genres.push("Lifestyle");
+
+  return mergeGenres([entry.group].filter(Boolean), genres);
+}
+
+function mergeGenres(...genreLists) {
+  return [...new Set(genreLists.flat().filter(Boolean))];
+}
+
+function stableId(value) {
+  return crypto.createHash("sha1").update(value).digest("hex").slice(0, 16);
+}
+
+function normalizeToken(value) {
+  return String(value || "").trim().toLowerCase();
 }

@@ -44,6 +44,8 @@ Recommended fields:
 
 See [docs/playlist-format.md](docs/playlist-format.md) for more detail.
 
+Entries with the same `tvg-id`/`tvg-name` and logo are grouped into one catalog item with multiple stream choices. For example, `PBS Kids - HD`, `PBS Kids - TVPass HD`, and `PBS Kids - TVPass SD` can appear as one `PBS Kids` item with three playable streams.
+
 ## Docker
 
 Build and run with Docker:
