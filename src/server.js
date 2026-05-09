@@ -146,7 +146,7 @@ function toPreview(entry, type = ADDON_TYPE, entries = cache.entries) {
     id: toClientId(entry.id, type, entries),
     type,
     name: entry.name,
-    poster: entry.logo || undefined,
+    posterShape: "landscape",
     logo: entry.logo || undefined,
     genres: entry.genres?.length ? entry.genres : entry.group ? [entry.group] : undefined
   };
@@ -156,8 +156,7 @@ function toMeta(entry, type = ADDON_TYPE, entries = cache.entries) {
   if (!entry) return null;
   return {
     ...toPreview(entry, type, entries),
-    description: `${entry.group || "Local playlist"} stream from your local M3U playlist.`,
-    background: entry.logo || undefined
+    description: `${entry.group || "Local playlist"} stream from your local M3U playlist.`
   };
 }
 
