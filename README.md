@@ -104,6 +104,8 @@ npm run import-manifest -- https://example.com/manifest.json \
 
 The generated `config/manifest.local.json` is ignored by Git. The importer clones the manifest JSON, including resources, types, catalogs, and presentation metadata. The local server then serves your local playlist entries through the imported catalog/type route shape.
 
+When an imported catalog id matches a playlist `group-title`, that catalog serves only entries from that group. For example, an imported catalog id of `usa` serves entries with `group-title="usa"`. An imported catalog id of `search` searches across all local playlist entries.
+
 To use it locally:
 
 ```sh

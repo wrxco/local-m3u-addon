@@ -38,11 +38,11 @@ const server = http.createServer(async (req, res) => {
       return json(res, manifest(entries));
     }
 
-    const catalogMatch = url.pathname.match(/^\/catalog\/([^/]+)\/([^/]+)\.json$/);
+    const catalogMatch = url.pathname.match(/^\/catalog\/([^/]+)\/([^/.]+)(?:\/(.+))?\.json$/);
     if (catalogMatch) {
-      const [, type, catalogId] = catalogMatch;
+      const [, type, catalogId, extraPath = ""] = catalogMatch;
       if (!supportsCatalog(type, catalogId, entries)) return json(res, { metas: [] });
-      return json(res, catalog(entries, url.searchParams, type));
+      return json(res, catalog(entries, requestExtras(url.searchParams, extraPath), type, catalogId));
     }
 
     const metaMatch = url.pathname.match(/^\/meta\/([^/]+)\/([^/]+)\.json$/);
@@ -121,12 +121,16 @@ function manifest(entries) {
   });
 }
 
-function catalog(entries, searchParams, type = ADDON_TYPE) {
-  const query = (searchParams.get("search") || "").trim().toLowerCase();
-  const genre = (searchParams.get("genre") || "").trim();
-  const skip = Number(searchParams.get("skip") || 0);
+function catalog(entries, extras, type = ADDON_TYPE, catalogId = CATALOG_ID) {
+  const query = (extras.get("search") || "").trim().toLowerCase();
+  const genre = (extras.get("genre") || "").trim();
+  const skip = Number(extras.get("skip") || 0);
+  const catalogGroup = catalogGroupForId(catalogId, entries);
+  if (catalogGroup === null) return { metas: [] };
+
   const filtered = entries.filter((entry) => {
-    if (genre && entry.group !== genre) return false;
+    if (catalogGroup && entry.group !== catalogGroup) return false;
+    if (genre && !matchesGenre(entry, genre, catalogGroup)) return false;
     if (query && !entry.name.toLowerCase().includes(query)) return false;
     return true;
   });
@@ -284,6 +288,35 @@ function idPrefixForType(type, entries) {
     if (prefix) return prefix;
   }
   return "";
+}
+
+function catalogGroupForId(catalogId, entries) {
+  if (catalogId === CATALOG_ID && !MANIFEST_OVERRIDE) return "";
+  if (cache.groups.includes(catalogId)) return catalogId;
+  if (MANIFEST_OVERRIDE && catalogId === "search") return "";
+  if (MANIFEST_OVERRIDE) return null;
+  return "";
+}
+
+function matchesGenre(entry, genre, catalogGroup) {
+  if (entry.group === genre) return true;
+  if (catalogGroup && entry.group === catalogGroup) return true;
+  return false;
+}
+
+function requestExtras(searchParams, extraPath) {
+  const extras = new URLSearchParams(searchParams);
+  if (!extraPath) return extras;
+
+  for (const part of extraPath.split("&")) {
+    const equalsIndex = part.indexOf("=");
+    if (equalsIndex === -1) continue;
+    const key = decodeURIComponent(part.slice(0, equalsIndex));
+    const value = decodeURIComponent(part.slice(equalsIndex + 1));
+    extras.set(key, value);
+  }
+
+  return extras;
 }
 
 function pickFields(source, keys) {
