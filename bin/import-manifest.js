@@ -23,7 +23,7 @@ if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
   throw new Error("Manifest response must be a JSON object.");
 }
 
-const imported = safeManifestOverride(manifest, args);
+const imported = cloneManifest(manifest, args);
 const outPath = path.resolve(args.out || "config/manifest.local.json");
 await fs.mkdir(path.dirname(outPath), { recursive: true });
 await fs.writeFile(outPath, `${JSON.stringify(imported, null, 2)}\n`);
@@ -32,39 +32,11 @@ console.log(`Imported manifest metadata from ${args.url}`);
 console.log(`Wrote ${outPath}`);
 console.log("Set MANIFEST_PATH to this file when running the server.");
 
-function safeManifestOverride(manifest, options) {
-  const imported = pickFields(manifest, [
-    "id",
-    "version",
-    "name",
-    "description",
-    "logo",
-    "background",
-    "contactEmail",
-    "behaviorHints"
-  ]);
-
+function cloneManifest(manifest, options) {
+  const imported = structuredClone(manifest);
   if (options.id) imported.id = options.id;
   if (options.name) imported.name = options.name;
-
-  if (Array.isArray(manifest.catalogs) && manifest.catalogs[0]) {
-    const catalog = pickFields(manifest.catalogs[0], ["name"]);
-    if (Object.keys(catalog).length > 0) imported.catalogs = [catalog];
-  }
-
   return imported;
-}
-
-function pickFields(source, keys) {
-  return Object.fromEntries(
-    keys
-      .filter((key) => typeof source[key] === "string" || isPlainObject(source[key]))
-      .map((key) => [key, source[key]])
-  );
-}
-
-function isPlainObject(value) {
-  return value && typeof value === "object" && !Array.isArray(value);
 }
 
 function parseArgs(argv) {
@@ -106,6 +78,6 @@ Options:
   --name VALUE    Override the imported add-on name.
   --out PATH      Output manifest override path.
 
-The importer keeps presentation metadata only. Routes, resources, types, and
-catalog ids remain controlled by this local add-on server.`);
+The importer clones the manifest JSON. The local server uses the imported
+resources, types, and catalogs while serving your local playlist data.`);
 }

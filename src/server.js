@@ -41,22 +41,23 @@ const server = http.createServer(async (req, res) => {
     const catalogMatch = url.pathname.match(/^\/catalog\/([^/]+)\/([^/]+)\.json$/);
     if (catalogMatch) {
       const [, type, catalogId] = catalogMatch;
-      if (type !== ADDON_TYPE || catalogId !== CATALOG_ID) return json(res, { metas: [] });
-      return json(res, catalog(entries, url.searchParams));
+      if (!supportsCatalog(type, catalogId, entries)) return json(res, { metas: [] });
+      return json(res, catalog(entries, url.searchParams, type));
     }
 
     const metaMatch = url.pathname.match(/^\/meta\/([^/]+)\/([^/]+)\.json$/);
     if (metaMatch) {
       const [, type, id] = metaMatch;
-      if (type !== ADDON_TYPE) return json(res, { meta: null });
-      return json(res, { meta: toMeta(cache.byId.get(decodeURIComponent(id))) });
+      if (!supportsType(type, entries)) return json(res, { meta: null });
+      const entry = cache.byId.get(resolveEntryId(decodeURIComponent(id), type, entries));
+      return json(res, { meta: toMeta(entry, type, entries) });
     }
 
     const streamMatch = url.pathname.match(/^\/stream\/([^/]+)\/([^/]+)\.json$/);
     if (streamMatch) {
       const [, type, id] = streamMatch;
-      if (type !== ADDON_TYPE) return json(res, { streams: [] });
-      const entry = cache.byId.get(decodeURIComponent(id));
+      if (!supportsType(type, entries)) return json(res, { streams: [] });
+      const entry = cache.byId.get(resolveEntryId(decodeURIComponent(id), type, entries));
       return json(res, { streams: entry ? [toStream(entry)] : [] });
     }
 
@@ -120,7 +121,7 @@ function manifest(entries) {
   });
 }
 
-function catalog(entries, searchParams) {
+function catalog(entries, searchParams, type = ADDON_TYPE) {
   const query = (searchParams.get("search") || "").trim().toLowerCase();
   const genre = (searchParams.get("genre") || "").trim();
   const skip = Number(searchParams.get("skip") || 0);
@@ -131,14 +132,14 @@ function catalog(entries, searchParams) {
   });
 
   return {
-    metas: filtered.slice(skip, skip + PAGE_SIZE).map(toPreview)
+    metas: filtered.slice(skip, skip + PAGE_SIZE).map((entry) => toPreview(entry, type, entries))
   };
 }
 
-function toPreview(entry) {
+function toPreview(entry, type = ADDON_TYPE, entries = cache.entries) {
   return {
-    id: entry.id,
-    type: ADDON_TYPE,
+    id: toClientId(entry.id, type, entries),
+    type,
     name: entry.name,
     poster: entry.logo || undefined,
     logo: entry.logo || undefined,
@@ -146,10 +147,10 @@ function toPreview(entry) {
   };
 }
 
-function toMeta(entry) {
+function toMeta(entry, type = ADDON_TYPE, entries = cache.entries) {
   if (!entry) return null;
   return {
-    ...toPreview(entry),
+    ...toPreview(entry, type, entries),
     description: `${entry.group || "Local playlist"} stream from your local M3U playlist.`,
     background: entry.logo || undefined
   };
@@ -239,22 +240,50 @@ function applyManifestOverride(baseManifest) {
     "behaviorHints"
   ]);
 
-  if (Array.isArray(MANIFEST_OVERRIDE.catalogs) && MANIFEST_OVERRIDE.catalogs[0]) {
-    imported.catalogs = [
-      {
-        ...baseManifest.catalogs[0],
-        ...pickFields(MANIFEST_OVERRIDE.catalogs[0], ["name"])
-      }
-    ];
-  }
+  if (Array.isArray(MANIFEST_OVERRIDE.resources)) imported.resources = MANIFEST_OVERRIDE.resources;
+  if (Array.isArray(MANIFEST_OVERRIDE.types)) imported.types = MANIFEST_OVERRIDE.types;
+  if (Array.isArray(MANIFEST_OVERRIDE.catalogs)) imported.catalogs = MANIFEST_OVERRIDE.catalogs;
 
   return {
     ...baseManifest,
-    ...imported,
-    resources: baseManifest.resources,
-    types: baseManifest.types,
-    catalogs: imported.catalogs || baseManifest.catalogs
+    ...imported
   };
+}
+
+function supportsCatalog(type, catalogId, entries) {
+  return manifest(entries).catalogs.some((catalogItem) => {
+    return catalogItem.type === type && catalogItem.id === catalogId;
+  });
+}
+
+function supportsType(type, entries) {
+  return manifest(entries).types.includes(type);
+}
+
+function toClientId(entryId, type, entries) {
+  const prefix = idPrefixForType(type, entries);
+  return prefix && !entryId.startsWith(prefix) ? `${prefix}${entryId}` : entryId;
+}
+
+function resolveEntryId(clientId, type, entries) {
+  if (cache.byId.has(clientId)) return clientId;
+
+  const prefix = idPrefixForType(type, entries);
+  if (prefix && clientId.startsWith(prefix)) return clientId.slice(prefix.length);
+
+  return clientId;
+}
+
+function idPrefixForType(type, entries) {
+  const resources = manifest(entries).resources || [];
+  for (const resource of resources) {
+    if (!isPlainObject(resource)) continue;
+    if (!Array.isArray(resource.idPrefixes) || resource.idPrefixes.length === 0) continue;
+    if (Array.isArray(resource.types) && !resource.types.includes(type)) continue;
+    const prefix = resource.idPrefixes.find((value) => typeof value === "string" && value.length > 0);
+    if (prefix) return prefix;
+  }
+  return "";
 }
 
 function pickFields(source, keys) {

@@ -89,20 +89,20 @@ Environment variables:
 | `PAGE_SIZE` | `100` | Number of catalog items returned per page. |
 | `STATIC_DIR` | `resources` locally, `/data/resources` in Docker | Optional directory of static files to serve, such as local channel logos. |
 | `STATIC_PATH_PREFIX` | `/resources` | URL path prefix for static files. |
-| `MANIFEST_PATH` | unset | Optional JSON file with imported manifest branding overrides. |
+| `MANIFEST_PATH` | unset | Optional JSON file with an imported manifest to clone. |
 
 The playlist is reloaded when the file changes.
 
 ## Manifest Import
 
-You can import presentation metadata from an existing add-on manifest and serve it as your local add-on's own manifest branding:
+You can import an existing add-on manifest and serve it as your local add-on's manifest:
 
 ```sh
 npm run import-manifest -- https://example.com/manifest.json \
   --out config/manifest.local.json
 ```
 
-The generated `config/manifest.local.json` is ignored by Git. It can override safe branding fields such as `id`, `name`, `description`, `logo`, `background`, `contactEmail`, `behaviorHints`, and the catalog display name. Routes, resource types, and catalog IDs still come from this local server so the manifest only advertises endpoints that actually exist.
+The generated `config/manifest.local.json` is ignored by Git. The importer clones the manifest JSON, including resources, types, catalogs, and presentation metadata. The local server then serves your local playlist entries through the imported catalog/type route shape.
 
 To use it locally:
 
