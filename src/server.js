@@ -34,6 +34,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     const entries = await loadPlaylist();
+    const baseUrl = publicBaseUrl(req);
+
+    const posterMatch = url.pathname.match(/^\/poster\/([^/]+)\/([^/]+)\.svg$/);
+    if (posterMatch) {
+      const [, type, id] = posterMatch;
+      if (!supportsType(type, entries)) return svg(res, posterSvg(null), 404);
+      const entry = cache.byId.get(resolveEntryId(decodeURIComponent(id), type, entries));
+      return svg(res, posterSvg(entry));
+    }
 
     if (url.pathname === "/" || url.pathname === "/manifest.json") {
       return json(res, manifest(entries));
@@ -43,7 +52,7 @@ const server = http.createServer(async (req, res) => {
     if (catalogMatch) {
       const [, type, catalogId, extraPath = ""] = catalogMatch;
       if (!supportsCatalog(type, catalogId, entries)) return json(res, { metas: [] });
-      return json(res, catalog(entries, requestExtras(url.searchParams, extraPath), type, catalogId));
+      return json(res, catalog(entries, requestExtras(url.searchParams, extraPath), type, catalogId, baseUrl));
     }
 
     const metaMatch = url.pathname.match(/^\/meta\/([^/]+)\/([^/]+)\.json$/);
@@ -51,7 +60,7 @@ const server = http.createServer(async (req, res) => {
       const [, type, id] = metaMatch;
       if (!supportsType(type, entries)) return json(res, { meta: null });
       const entry = cache.byId.get(resolveEntryId(decodeURIComponent(id), type, entries));
-      return json(res, { meta: toMeta(entry, type, entries) });
+      return json(res, { meta: toMeta(entry, type, entries, baseUrl) });
     }
 
     const streamMatch = url.pathname.match(/^\/stream\/([^/]+)\/([^/]+)\.json$/);
@@ -122,7 +131,7 @@ function manifest(entries) {
   });
 }
 
-function catalog(entries, extras, type = ADDON_TYPE, catalogId = CATALOG_ID) {
+function catalog(entries, extras, type = ADDON_TYPE, catalogId = CATALOG_ID, baseUrl = "") {
   const query = (extras.get("search") || "").trim().toLowerCase();
   const genre = (extras.get("genre") || "").trim();
   const skip = Number(extras.get("skip") || 0);
@@ -137,25 +146,27 @@ function catalog(entries, extras, type = ADDON_TYPE, catalogId = CATALOG_ID) {
   });
 
   return {
-    metas: filtered.slice(skip, skip + PAGE_SIZE).map((entry) => toPreview(entry, type, entries))
+    metas: filtered.slice(skip, skip + PAGE_SIZE).map((entry) => toPreview(entry, type, entries, baseUrl))
   };
 }
 
-function toPreview(entry, type = ADDON_TYPE, entries = cache.entries) {
+function toPreview(entry, type = ADDON_TYPE, entries = cache.entries, baseUrl = "") {
+  const clientId = toClientId(entry.id, type, entries);
   return {
-    id: toClientId(entry.id, type, entries),
+    id: clientId,
     type,
     name: entry.name,
-    posterShape: "landscape",
+    poster: posterUrl(type, clientId, baseUrl),
+    posterShape: "poster",
     logo: entry.logo || undefined,
     genres: entry.genres?.length ? entry.genres : entry.group ? [entry.group] : undefined
   };
 }
 
-function toMeta(entry, type = ADDON_TYPE, entries = cache.entries) {
+function toMeta(entry, type = ADDON_TYPE, entries = cache.entries, baseUrl = "") {
   if (!entry) return null;
   return {
-    ...toPreview(entry, type, entries),
+    ...toPreview(entry, type, entries, baseUrl),
     description: `${entry.group || "Local playlist"} stream from your local M3U playlist.`
   };
 }
@@ -177,6 +188,15 @@ function json(res, body, status = 200) {
     "cache-control": "no-store"
   });
   res.end(payload);
+}
+
+function svg(res, body, status = 200) {
+  res.writeHead(status, {
+    "content-type": "image/svg+xml; charset=utf-8",
+    "access-control-allow-origin": "*",
+    "cache-control": "public, max-age=86400"
+  });
+  res.end(body);
 }
 
 async function serveStatic(req, res, pathname) {
@@ -321,6 +341,57 @@ function requestExtras(searchParams, extraPath) {
   }
 
   return extras;
+}
+
+function publicBaseUrl(req) {
+  const proto = req.headers["x-forwarded-proto"] || (req.socket.encrypted ? "https" : "http");
+  const host = req.headers["x-forwarded-host"] || req.headers.host || `${HOST}:${PORT}`;
+  return `${String(proto).split(",")[0]}://${String(host).split(",")[0]}`;
+}
+
+function posterUrl(type, clientId, baseUrl) {
+  return `${baseUrl}/poster/${encodeURIComponent(type)}/${encodeURIComponent(clientId)}.svg`;
+}
+
+function posterSvg(entry) {
+  const name = entry?.name || "Unknown Channel";
+  const logo = entry?.logo || "";
+  const image = logo
+    ? `<image href="${escapeXml(logo)}" x="56" y="126" width="400" height="300" preserveAspectRatio="xMidYMid meet"/>`
+    : `<text x="256" y="340" text-anchor="middle" font-size="96" font-family="Arial, sans-serif" fill="#d7b7ff">?</text>`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="768" viewBox="0 0 512 768">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a4009f"/>
+      <stop offset="1" stop-color="#6f0077"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#120018" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="512" height="768" rx="52" fill="url(#bg)"/>
+  <rect x="34" y="80" width="444" height="420" rx="34" fill="#08050c" opacity="0.18"/>
+  <g filter="url(#shadow)">
+    ${image}
+  </g>
+  <text x="256" y="620" text-anchor="middle" font-size="38" font-weight="700" font-family="Arial, sans-serif" fill="#ffffff">${escapeXml(truncateText(name, 22))}</text>
+  <text x="256" y="670" text-anchor="middle" font-size="24" font-family="Arial, sans-serif" fill="#e9cbff" opacity="0.82">${escapeXml(entry?.group || "TV")}</text>
+</svg>`;
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value);
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
 }
 
 function pickFields(source, keys) {
