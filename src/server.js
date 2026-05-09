@@ -1,3 +1,4 @@
+import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -11,6 +12,8 @@ const ADDON_NAME = process.env.ADDON_NAME || "My Local Add-on";
 const ADDON_TYPE = process.env.ADDON_TYPE || "tv";
 const CATALOG_ID = process.env.CATALOG_ID || "local_channels";
 const PAGE_SIZE = Number(process.env.PAGE_SIZE || 100);
+const STATIC_DIR = path.resolve(process.env.STATIC_DIR || "resources");
+const STATIC_PATH_PREFIX = normalizePathPrefix(process.env.STATIC_PATH_PREFIX || "/resources");
 
 let cache = {
   mtimeMs: 0,
@@ -22,6 +25,11 @@ let cache = {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || `${HOST}:${PORT}`}`);
+
+    if (url.pathname.startsWith(`${STATIC_PATH_PREFIX}/`)) {
+      return serveStatic(req, res, url.pathname);
+    }
+
     const entries = await loadPlaylist();
 
     if (url.pathname === "/" || url.pathname === "/manifest.json") {
@@ -160,4 +168,57 @@ function json(res, body, status = 200) {
     "cache-control": "no-store"
   });
   res.end(payload);
+}
+
+async function serveStatic(req, res, pathname) {
+  if (!["GET", "HEAD"].includes(req.method)) {
+    res.writeHead(405, {
+      "allow": "GET, HEAD",
+      "access-control-allow-origin": "*"
+    });
+    return res.end();
+  }
+
+  let relativePath;
+  try {
+    relativePath = decodeURIComponent(pathname.slice(STATIC_PATH_PREFIX.length)).replace(/^\/+/, "");
+  } catch {
+    return json(res, { error: "Bad static resource path" }, 400);
+  }
+
+  const filePath = path.resolve(STATIC_DIR, relativePath);
+  if (filePath !== STATIC_DIR && !filePath.startsWith(`${STATIC_DIR}${path.sep}`)) {
+    return json(res, { error: "Static resource path is outside the resource directory" }, 403);
+  }
+
+  const stat = await fs.stat(filePath).catch(() => null);
+  if (!stat || !stat.isFile()) return json(res, { error: "Static resource not found" }, 404);
+
+  res.writeHead(200, {
+    "content-type": contentType(filePath),
+    "content-length": String(stat.size),
+    "access-control-allow-origin": "*",
+    "cache-control": "public, max-age=86400"
+  });
+
+  if (req.method === "HEAD") return res.end();
+  return createReadStream(filePath).pipe(res);
+}
+
+function normalizePathPrefix(value) {
+  const prefix = `/${String(value).replace(/^\/+|\/+$/g, "")}`;
+  return prefix === "/" ? "/resources" : prefix;
+}
+
+function contentType(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  return {
+    ".avif": "image/avif",
+    ".gif": "image/gif",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".svg": "image/svg+xml; charset=utf-8",
+    ".webp": "image/webp"
+  }[extension] || "application/octet-stream";
 }

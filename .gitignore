@@ -1,6 +1,7 @@
 node_modules/
 logs/
 reports/
-playlists/local.m3u8
+playlists/local*.m3u8
+resources/
 .DS_Store
 docs/receipt-printer-plan.md

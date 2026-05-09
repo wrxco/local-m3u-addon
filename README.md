@@ -87,8 +87,29 @@ Environment variables:
 | `ADDON_TYPE` | `tv` | Content type used in catalog/meta/stream routes. |
 | `CATALOG_ID` | `local_channels` | Catalog identifier. |
 | `PAGE_SIZE` | `100` | Number of catalog items returned per page. |
+| `STATIC_DIR` | `resources` locally, `/data/resources` in Docker | Optional directory of static files to serve, such as local channel logos. |
+| `STATIC_PATH_PREFIX` | `/resources` | URL path prefix for static files. |
 
 The playlist is reloaded when the file changes.
+
+## Static Resources
+
+You can host local logos or other playlist assets from the same add-on server. Put files under `resources/` and reference them from the playlist with `/resources/...` URLs:
+
+```m3u
+#EXTINF:-1 tvg-logo="http://127.0.0.1:7000/resources/logos/example.png" group-title="samples",Example Channel
+https://example.com/live/channel.m3u8
+```
+
+In Docker, mount the resource directory read-only:
+
+```sh
+docker run --rm \
+  -p 7000:7000 \
+  -v "$PWD/playlists/local.m3u8:/data/playlist.m3u8:ro" \
+  -v "$PWD/resources:/data/resources:ro" \
+  local-m3u-addon
+```
 
 ## Endpoints
 
