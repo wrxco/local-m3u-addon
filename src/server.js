@@ -386,10 +386,9 @@ async function logoBuffer(logo) {
 }
 
 function posterSvg(entry, hasLogo = false) {
-  const name = entry?.name || "Unknown Channel";
   const image = hasLogo
     ? ""
-    : `<text x="256" y="340" text-anchor="middle" font-size="96" font-family="Arial, sans-serif" fill="#d7b7ff">?</text>`;
+    : `<circle cx="256" cy="290" r="52" fill="#d7b7ff" opacity="0.75"/>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="768" viewBox="0 0 512 768">
@@ -407,22 +406,7 @@ function posterSvg(entry, hasLogo = false) {
   <g filter="url(#shadow)">
     ${image}
   </g>
-  <text x="256" y="620" text-anchor="middle" font-size="38" font-weight="700" font-family="Arial, sans-serif" fill="#ffffff">${escapeXml(truncateText(name, 22))}</text>
-  <text x="256" y="670" text-anchor="middle" font-size="24" font-family="Arial, sans-serif" fill="#e9cbff" opacity="0.82">${escapeXml(entry?.group || "TV")}</text>
 </svg>`;
-}
-
-function escapeXml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function truncateText(value, maxLength) {
-  const text = String(value);
-  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
 }
 
 function pickFields(source, keys) {
