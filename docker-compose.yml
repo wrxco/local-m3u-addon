@@ -10,7 +10,11 @@ services:
       PLAYLIST_PATH: "/data/playlist.m3u8"
       STATIC_DIR: "/data/resources"
       STATIC_PATH_PREFIX: "/resources"
+      # Uncomment when ./config/manifest.local.json exists.
+      # MANIFEST_PATH: "/data/manifest.json"
     volumes:
       - ./playlists/local.m3u8:/data/playlist.m3u8:ro
       - ./resources:/data/resources:ro
+      # Avoid mounting a missing file path; Docker may create a directory.
+      # - ./config/manifest.local.json:/data/manifest.json:ro
     restart: unless-stopped

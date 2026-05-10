@@ -50,14 +50,16 @@ See [docs/playlist-format.md](docs/playlist-format.md) for the full playlist sem
 
 ## Docker
 
-Build and run with Docker:
+Build and run with Docker. Use absolute bind-mount paths on servers where the Compose file lives outside this repo; Docker may create a directory if a relative file mount points at a missing host path.
 
 ```sh
 cp playlists/example.m3u8 playlists/local.m3u8
+mkdir -p resources
 docker build -t local-m3u-addon .
 docker run --rm \
   -p 7000:7000 \
   -v "$PWD/playlists/local.m3u8:/data/playlist.m3u8:ro" \
+  -v "$PWD/resources:/data/resources:ro" \
   -e ADDON_NAME="My Local Add-on" \
   local-m3u-addon
 ```
@@ -66,6 +68,7 @@ Or use Docker Compose:
 
 ```sh
 cp playlists/example.m3u8 playlists/local.m3u8
+mkdir -p resources
 docker compose up --build
 ```
 
@@ -76,6 +79,45 @@ http://localhost:7000/manifest.json
 ```
 
 For another machine on your network, replace `localhost` with that machine's IP address or hostname.
+
+### Optional Reverse Proxy
+
+Traefik is not required. The plain Docker and Compose examples above publish port `7000` directly and are enough for local or LAN use.
+
+If you already run Traefik or another reverse proxy on the same Docker host, you usually do not need to publish port `7000` with a `ports:` block. Put the add-on on the same Docker network as the proxy and route to internal container port `7000`.
+
+Example Traefik service shape:
+
+```yaml
+services:
+  local-m3u-addon:
+    build: /absolute/path/to/local-m3u-addon
+    environment:
+      HOST: 0.0.0.0
+      PORT: 7000
+      PLAYLIST_PATH: /data/playlist.m3u8
+      STATIC_DIR: /data/resources
+      STATIC_PATH_PREFIX: /resources
+      MANIFEST_PATH: /data/manifest.json
+    volumes:
+      - /absolute/path/to/playlists/local.m3u8:/data/playlist.m3u8:ro
+      - /absolute/path/to/resources:/data/resources:ro
+      - /absolute/path/to/config/manifest.local.json:/data/manifest.json:ro
+    networks:
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik
+      - traefik.http.routers.local-m3u-addon.rule=Host(`m3u.example.com`)
+      - traefik.http.routers.local-m3u-addon.entrypoints=websecure
+      - traefik.http.routers.local-m3u-addon.tls=true
+      - traefik.http.services.local-m3u-addon.loadbalancer.server.port=7000
+    restart: unless-stopped
+
+networks:
+  traefik:
+    external: true
+```
 
 ## Configuration
 
@@ -106,6 +148,25 @@ npm run import-manifest -- https://example.com/manifest.json \
   --out config/manifest.local.json
 ```
 
+If the target server does not have Node/npm installed, run the importer through Docker:
+
+```sh
+docker run --rm \
+  -v "$PWD:/app" \
+  -w /app \
+  node:22-alpine \
+  node bin/import-manifest.js https://example.com/manifest.json \
+    --out config/manifest.local.json
+```
+
+Or run it inside an already rebuilt add-on container that has a writable config mount:
+
+```sh
+docker compose exec local-m3u-addon sh -lc \
+  'node /app/bin/import-manifest.js https://example.com/manifest.json --out /data/config/manifest.local.json'
+docker compose restart local-m3u-addon
+```
+
 The generated `config/manifest.local.json` is ignored by Git. The importer clones the manifest JSON, including resources, types, catalogs, and presentation metadata. The local server then serves your local playlist entries through the imported catalog/type route shape.
 
 When an imported catalog id matches a playlist `group-title`, that catalog serves only entries from that group. For example, an imported catalog id of `usa` serves entries with `group-title="usa"`. An imported catalog id of `search` searches across all local playlist entries.
@@ -124,6 +185,8 @@ environment:
 volumes:
   - /absolute/path/to/config/manifest.local.json:/data/manifest.json:ro
 ```
+
+The manifest file is read at server startup. Restart or recreate the container after importing a new manifest.
 
 ## Static Resources
 
@@ -144,15 +207,19 @@ docker run --rm \
   local-m3u-addon
 ```
 
+The server also generates Omni-friendly PNG poster cards at `/poster/v2/<type>/<id>.png`. These cards use the `tvg-logo` source image, fit it into a purple poster, and avoid cropping or distortion.
+
 ## Endpoints
 
 - `/manifest.json`
 - `/catalog/tv/local_channels.json`
 - `/meta/tv/<id>.json`
 - `/stream/tv/<id>.json`
+- `/poster/<version>/<type>/<id>.png`
+- `/resources/<path>`
 - `/health.json`
 
-The endpoint shape follows the general manifest/catalog/meta/stream pattern used by Stremio-style and EMET/Omni-compatible add-ons.
+The endpoint shape follows the general manifest/catalog/meta/stream pattern used by Stremio-style and EMET/Omni-compatible add-ons. If `MANIFEST_PATH` points to an imported manifest, catalog/type route ids come from that manifest.
 
 ## Playlist Audit Tool
 
