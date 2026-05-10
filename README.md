@@ -42,9 +42,11 @@ Recommended fields:
 - `tvg-logo`: optional logo URL.
 - `group-title`: optional category/genre.
 
-See [docs/playlist-format.md](docs/playlist-format.md) for more detail.
-
 Entries with the same `tvg-id`/`tvg-name` and logo are grouped into one catalog item with multiple stream choices. For example, `PBS Kids - HD`, `PBS Kids - TVPass HD`, and `PBS Kids - TVPass SD` can appear as one `PBS Kids` item with three playable streams.
+
+`group-title` also matters when cloning an existing manifest: imported catalog ids such as `usa`, `usa_locals`, or `247` can map directly to matching playlist groups.
+
+See [docs/playlist-format.md](docs/playlist-format.md) for the full playlist semantics, grouping rules, catalog mapping, genre filtering, and poster-card behavior.
 
 ## Docker
 
