@@ -134,6 +134,8 @@ The generated poster is what Omni uses in grid views. The source logo is resized
 
 Transparent PNG logos usually work best. SVG, WebP, JPEG, and PNG may work as source assets if the server can fetch and rasterize them.
 
+Use `npm run prepare-playlist` to download remote `tvg-logo` assets into `resources/` and rewrite a local playlist copy so it references this add-on's `/resources/...` endpoint. Failed downloads are reported and left on their original remote URLs.
+
 ## Best Practices
 
 - Use a stable `tvg-id` for all variants of the same channel.

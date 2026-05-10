@@ -8,11 +8,13 @@
     "start": "node src/server.js",
     "audit": "node bin/audit-playlist.js",
     "import-manifest": "node bin/import-manifest.js",
+    "prepare-playlist": "node bin/prepare-playlist.js",
     "test": "node --test"
   },
   "bin": {
     "audit-playlist": "./bin/audit-playlist.js",
-    "import-manifest": "./bin/import-manifest.js"
+    "import-manifest": "./bin/import-manifest.js",
+    "prepare-playlist": "./bin/prepare-playlist.js"
   },
   "engines": {
     "node": ">=18"

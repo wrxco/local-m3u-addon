@@ -188,6 +188,42 @@ volumes:
 
 The manifest file is read at server startup. Restart or recreate the container after importing a new manifest.
 
+## Playlist Resource Preparation
+
+If your playlist references remote logos, prepare a self-contained local copy before running the add-on:
+
+```sh
+npm run prepare-playlist -- \
+  --input /path/to/source-playlist.m3u8 \
+  --out playlists/local.m3u8 \
+  --resources-dir resources \
+  --public-base-url https://m3u.example.com
+```
+
+This helper:
+
+- finds unique `tvg-logo` URLs
+- downloads them into `resources/`
+- writes `resources/logo-map.json`
+- rewrites a local playlist copy so logos point at `https://m3u.example.com/resources/...`
+- leaves failed logo URLs unchanged so the playlist does not point at missing local files
+
+If the target server does not have Node/npm installed, run it through Docker:
+
+```sh
+docker run --rm \
+  -v "$PWD:/app" \
+  -w /app \
+  node:22-alpine \
+  node bin/prepare-playlist.js \
+    --input /app/source-playlist.m3u8 \
+    --out playlists/local.m3u8 \
+    --resources-dir resources \
+    --public-base-url https://m3u.example.com
+```
+
+The prepared playlist and resources are ignored by Git by default.
+
 ## Static Resources
 
 You can host local logos or other playlist assets from the same add-on server. Put files under `resources/` and reference them from the playlist with `/resources/...` URLs:
