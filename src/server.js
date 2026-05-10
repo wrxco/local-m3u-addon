@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { parseM3u } from "./m3u.js";
 import crypto from "node:crypto";
+import sharp from "sharp";
 
 const PORT = Number(process.env.PORT || 7000);
 const HOST = process.env.HOST || "127.0.0.1";
@@ -36,12 +37,12 @@ const server = http.createServer(async (req, res) => {
     const entries = await loadPlaylist();
     const baseUrl = publicBaseUrl(req);
 
-    const posterMatch = url.pathname.match(/^\/poster\/([^/]+)\/([^/]+)\.svg$/);
+    const posterMatch = url.pathname.match(/^\/poster\/([^/]+)\/([^/]+)\.(?:png|svg)$/);
     if (posterMatch) {
       const [, type, id] = posterMatch;
-      if (!supportsType(type, entries)) return svg(res, posterSvg(null), 404);
+      if (!supportsType(type, entries)) return png(res, await posterPng(null), 404);
       const entry = cache.byId.get(resolveEntryId(decodeURIComponent(id), type, entries));
-      return svg(res, posterSvg(entry));
+      return png(res, await posterPng(entry));
     }
 
     if (url.pathname === "/" || url.pathname === "/manifest.json") {
@@ -190,9 +191,10 @@ function json(res, body, status = 200) {
   res.end(payload);
 }
 
-function svg(res, body, status = 200) {
+function png(res, body, status = 200) {
   res.writeHead(status, {
-    "content-type": "image/svg+xml; charset=utf-8",
+    "content-type": "image/png",
+    "content-length": String(body.length),
     "access-control-allow-origin": "*",
     "cache-control": "public, max-age=86400"
   });
@@ -350,14 +352,43 @@ function publicBaseUrl(req) {
 }
 
 function posterUrl(type, clientId, baseUrl) {
-  return `${baseUrl}/poster/${encodeURIComponent(type)}/${encodeURIComponent(clientId)}.svg`;
+  return `${baseUrl}/poster/${encodeURIComponent(type)}/${encodeURIComponent(clientId)}.png`;
 }
 
-function posterSvg(entry) {
+async function posterPng(entry) {
+  const logo = await logoBuffer(entry?.logo);
+  const svg = posterSvg(entry, Boolean(logo));
+  const image = sharp(Buffer.from(svg));
+
+  if (!logo) return image.png().toBuffer();
+
+  const fittedLogo = await sharp(logo)
+    .resize(400, 300, { fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer();
+
+  return image
+    .composite([{ input: fittedLogo, left: 56, top: 126 }])
+    .png()
+    .toBuffer();
+}
+
+async function logoBuffer(logo) {
+  if (!logo) return null;
+
+  try {
+    const response = await fetch(logo);
+    if (!response.ok) return null;
+    return Buffer.from(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+function posterSvg(entry, hasLogo = false) {
   const name = entry?.name || "Unknown Channel";
-  const logo = entry?.logo || "";
-  const image = logo
-    ? `<image href="${escapeXml(logo)}" x="56" y="126" width="400" height="300" preserveAspectRatio="xMidYMid meet"/>`
+  const image = hasLogo
+    ? ""
     : `<text x="256" y="340" text-anchor="middle" font-size="96" font-family="Arial, sans-serif" fill="#d7b7ff">?</text>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
