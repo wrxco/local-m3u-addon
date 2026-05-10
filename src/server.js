@@ -18,6 +18,7 @@ const STATIC_DIR = path.resolve(process.env.STATIC_DIR || "resources");
 const STATIC_PATH_PREFIX = normalizePathPrefix(process.env.STATIC_PATH_PREFIX || "/resources");
 const MANIFEST_PATH = process.env.MANIFEST_PATH ? path.resolve(process.env.MANIFEST_PATH) : "";
 const MANIFEST_OVERRIDE = await loadManifestOverride();
+const POSTER_VERSION = "v2";
 
 let cache = {
   mtimeMs: 0,
@@ -37,7 +38,7 @@ const server = http.createServer(async (req, res) => {
     const entries = await loadPlaylist();
     const baseUrl = publicBaseUrl(req);
 
-    const posterMatch = url.pathname.match(/^\/poster\/([^/]+)\/([^/]+)\.(?:png|svg)$/);
+    const posterMatch = url.pathname.match(/^\/poster\/(?:v[0-9]+\/)?([^/]+)\/([^/]+)\.(?:png|svg)$/);
     if (posterMatch) {
       const [, type, id] = posterMatch;
       if (!supportsType(type, entries)) return png(res, await posterPng(null), 404);
@@ -352,7 +353,7 @@ function publicBaseUrl(req) {
 }
 
 function posterUrl(type, clientId, baseUrl) {
-  return `${baseUrl}/poster/${encodeURIComponent(type)}/${encodeURIComponent(clientId)}.png`;
+  return `${baseUrl}/poster/${POSTER_VERSION}/${encodeURIComponent(type)}/${encodeURIComponent(clientId)}.png`;
 }
 
 async function posterPng(entry) {
@@ -363,12 +364,15 @@ async function posterPng(entry) {
   if (!logo) return image.png().toBuffer();
 
   const fittedLogo = await sharp(logo)
-    .resize(400, 300, { fit: "inside", withoutEnlargement: true })
+    .resize(430, 360, { fit: "inside" })
     .png()
     .toBuffer();
+  const metadata = await sharp(fittedLogo).metadata();
+  const left = 41 + Math.round((430 - metadata.width) / 2);
+  const top = 142 + Math.round((360 - metadata.height) / 2);
 
   return image
-    .composite([{ input: fittedLogo, left: 56, top: 126 }])
+    .composite([{ input: fittedLogo, left, top }])
     .png()
     .toBuffer();
 }
@@ -402,7 +406,7 @@ function posterSvg(entry, hasLogo = false) {
     </filter>
   </defs>
   <rect width="512" height="768" rx="52" fill="url(#bg)"/>
-  <rect x="34" y="80" width="444" height="420" rx="34" fill="#08050c" opacity="0.18"/>
+  <rect x="34" y="110" width="444" height="430" rx="34" fill="#08050c" opacity="0.18"/>
   <g filter="url(#shadow)">
     ${image}
   </g>

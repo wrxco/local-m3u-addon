@@ -116,7 +116,7 @@ https://tvpass.example/live/WNET/sd
     const catalog = await getJson(`http://127.0.0.1:${port}/catalog/tv/usa/genre=Kids.json`);
     assert.equal(catalog.metas.length, 1);
     assert.equal(catalog.metas[0].name, "PBS Kids");
-    assert.ok(catalog.metas[0].poster.startsWith(`http://127.0.0.1:${port}/poster/tv/`));
+    assert.ok(catalog.metas[0].poster.startsWith(`http://127.0.0.1:${port}/poster/v2/tv/`));
     assert.ok(catalog.metas[0].poster.endsWith(".png"));
     assert.equal(catalog.metas[0].posterShape, "poster");
     assert.equal(catalog.metas[0].logo, "https://example.test/pbskids.png");
