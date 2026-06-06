@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import sharp from "sharp";
 import { parseM3u, toM3u } from "../src/m3u.js";
 import { auditEntries } from "../src/audit.js";
 
@@ -67,16 +68,30 @@ test("server groups duplicate channel entries into multiple streams", async () =
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "local-m3u-addon-"));
   const playlistPath = path.join(tmp, "playlist.m3u8");
   const manifestPath = path.join(tmp, "manifest.json");
+  const resourcesPath = path.join(tmp, "resources");
   const port = 7600 + Number(process.pid % 1000);
+  const logoUrl = `https://example.test/resources/logos/pbskids.png`;
+
+  await fs.mkdir(path.join(resourcesPath, "logos"), { recursive: true });
+  await sharp({
+    create: {
+      width: 96,
+      height: 64,
+      channels: 4,
+      background: "#2e4bd3"
+    }
+  })
+    .png()
+    .toFile(path.join(resourcesPath, "logos", "pbskids.png"));
 
   await fs.writeFile(
     playlistPath,
     `#EXTM3U
-#EXTINF:-1 tvg-id="PBS.KIDS.HD.us2" tvg-name="PBS.KIDS.HD.us2" tvg-logo="https://example.test/pbskids.png" group-title="usa",PBS Kids - HD
+#EXTINF:-1 tvg-id="PBS.KIDS.HD.us2" tvg-name="PBS.KIDS.HD.us2" tvg-logo="${logoUrl}" group-title="usa",PBS Kids - HD
 https://example.test/pbs/hd.m3u8
-#EXTINF:-1 tvg-id="PBS.KIDS.HD.us2" tvg-name="PBS.KIDS.HD.us2" tvg-logo="https://example.test/pbskids.png" group-title="usa",PBS Kids - TVPass HD
+#EXTINF:-1 tvg-id="PBS.KIDS.HD.us2" tvg-name="PBS.KIDS.HD.us2" tvg-logo="${logoUrl}" group-title="usa",PBS Kids - TVPass HD
 https://tvpass.example/live/WNET/hd
-#EXTINF:-1 tvg-id="PBS.KIDS.HD.us2" tvg-name="PBS.KIDS.HD.us2" tvg-logo="https://example.test/pbskids.png" group-title="usa",PBS Kids - TVPass SD
+#EXTINF:-1 tvg-id="PBS.KIDS.HD.us2" tvg-name="PBS.KIDS.HD.us2" tvg-logo="${logoUrl}" group-title="usa",PBS Kids - TVPass SD
 https://tvpass.example/live/WNET/sd
 `
   );
@@ -105,7 +120,8 @@ https://tvpass.example/live/WNET/sd
       ...process.env,
       PORT: String(port),
       PLAYLIST_PATH: playlistPath,
-      MANIFEST_PATH: manifestPath
+      MANIFEST_PATH: manifestPath,
+      STATIC_DIR: resourcesPath
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -119,7 +135,7 @@ https://tvpass.example/live/WNET/sd
     assert.ok(catalog.metas[0].poster.startsWith(`http://127.0.0.1:${port}/poster/v2/tv/`));
     assert.ok(catalog.metas[0].poster.endsWith(".png"));
     assert.equal(catalog.metas[0].posterShape, "poster");
-    assert.equal(catalog.metas[0].logo, "https://example.test/pbskids.png");
+    assert.equal(catalog.metas[0].logo, logoUrl);
     assert.deepEqual(catalog.metas[0].genres, ["usa", "Kids"]);
 
     const poster = await fetch(catalog.metas[0].poster);

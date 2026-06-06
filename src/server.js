@@ -218,8 +218,8 @@ async function serveStatic(req, res, pathname) {
     return json(res, { error: "Bad static resource path" }, 400);
   }
 
-  const filePath = path.resolve(STATIC_DIR, relativePath);
-  if (filePath !== STATIC_DIR && !filePath.startsWith(`${STATIC_DIR}${path.sep}`)) {
+  const filePath = staticFilePath(relativePath);
+  if (!filePath) {
     return json(res, { error: "Static resource path is outside the resource directory" }, 403);
   }
 
@@ -380,6 +380,9 @@ async function posterPng(entry) {
 async function logoBuffer(logo) {
   if (!logo) return null;
 
+  const localLogo = await localStaticLogoBuffer(logo);
+  if (localLogo) return localLogo;
+
   try {
     const response = await fetch(logo);
     if (!response.ok) return null;
@@ -387,6 +390,43 @@ async function logoBuffer(logo) {
   } catch {
     return null;
   }
+}
+
+async function localStaticLogoBuffer(logo) {
+  let url;
+  try {
+    url = new URL(logo);
+  } catch {
+    return null;
+  }
+
+  if (!url.pathname.startsWith(`${STATIC_PATH_PREFIX}/`)) return null;
+
+  let relativePath;
+  try {
+    relativePath = decodeURIComponent(url.pathname.slice(STATIC_PATH_PREFIX.length)).replace(/^\/+/, "");
+  } catch {
+    return null;
+  }
+
+  const filePath = staticFilePath(relativePath);
+  if (!filePath) return null;
+
+  try {
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) return null;
+    return fs.readFile(filePath);
+  } catch {
+    return null;
+  }
+}
+
+function staticFilePath(relativePath) {
+  const filePath = path.resolve(STATIC_DIR, relativePath);
+  if (filePath === STATIC_DIR || filePath.startsWith(`${STATIC_DIR}${path.sep}`)) {
+    return filePath;
+  }
+  return null;
 }
 
 function posterSvg(entry, hasLogo = false) {
