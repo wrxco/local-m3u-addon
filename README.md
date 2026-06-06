@@ -281,3 +281,21 @@ npm run audit -- --input /path/to/playlist.m3u8 \
 ```
 
 The audit output is not a legal opinion. It is a triage tool to help spot brittle or questionable entries such as short links, raw IPs, non-direct web endpoints, nonstandard ports, event/PPV wording, and commercial-channel names that deserve rights/source review.
+
+## Stream Checking
+
+You can test every stream exposed by a catalog URL:
+
+```sh
+npm run check-catalog -- https://manny.example/catalog/tv/usa_locals.json
+```
+
+The checker fetches every catalog page, calls the matching `/stream/<type>/<id>.json` endpoint for each item, tests each returned stream URL, and prints a terminal report. Each result includes both the add-on stream endpoint and the actual playback URL it tested.
+
+Useful options:
+
+```sh
+npm run check-catalog -- https://manny.example/catalog/tv/usa_locals.json \
+  --timeout 10000 \
+  --concurrency 8
+```
