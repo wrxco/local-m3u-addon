@@ -299,3 +299,42 @@ npm run check-catalog -- https://manny.example/catalog/tv/usa_locals.json \
   --timeout 10000 \
   --concurrency 8
 ```
+
+To save the results for review or pruning:
+
+```sh
+npm run check-catalog -- https://manny.example/catalog/tv/usa_locals.json \
+  --json-out reports/usa_locals.stream-check.json
+```
+
+If you do not have npm on the host, run the same script through Docker:
+
+```sh
+docker run --rm -v "$PWD:/app" -w /app node:22-alpine \
+  node bin/check-catalog-streams.js \
+  https://manny.example/catalog/tv/usa_locals.json \
+  --json-out reports/usa_locals.stream-check.json
+```
+
+## Pruning Bad Streams
+
+After saving a JSON stream-check report, you can write a new playlist with failed stream entries removed:
+
+```sh
+npm run prune-playlist -- \
+  --input playlists/local.m3u8 \
+  --report reports/usa_locals.stream-check.json \
+  --out playlists/local.pruned.m3u8
+```
+
+Docker-only host:
+
+```sh
+docker run --rm -v "$PWD:/app" -w /app node:22-alpine \
+  node bin/prune-playlist.js \
+  --input playlists/local.m3u8 \
+  --report reports/usa_locals.stream-check.json \
+  --out playlists/local.pruned.m3u8
+```
+
+The pruner does not edit the source playlist. It removes complete `#EXTINF` entries whose stream URL appears as a failing `testedUrl` in the JSON report. Review the pruned output before replacing the active playlist.

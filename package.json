@@ -10,13 +10,15 @@
     "check-catalog": "node bin/check-catalog-streams.js",
     "import-manifest": "node bin/import-manifest.js",
     "prepare-playlist": "node bin/prepare-playlist.js",
+    "prune-playlist": "node bin/prune-playlist.js",
     "test": "node --test"
   },
   "bin": {
     "audit-playlist": "./bin/audit-playlist.js",
     "check-catalog-streams": "./bin/check-catalog-streams.js",
     "import-manifest": "./bin/import-manifest.js",
-    "prepare-playlist": "./bin/prepare-playlist.js"
+    "prepare-playlist": "./bin/prepare-playlist.js",
+    "prune-playlist": "./bin/prune-playlist.js"
   },
   "engines": {
     "node": ">=18"

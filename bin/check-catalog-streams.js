@@ -54,6 +54,10 @@ await runPool(catalogItems, concurrency, async (item, itemIndex) => {
 
 printSummary(checks);
 
+if (args.jsonOut) {
+  await writeJsonReport(args.jsonOut, checks);
+}
+
 async function fetchAllCatalogItems(url) {
   const items = [];
   let skip = Number(url.searchParams.get("skip") || 0);
@@ -238,6 +242,41 @@ function printSummary(checks) {
   }
 }
 
+async function writeJsonReport(outPath, checks) {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const resolved = path.resolve(outPath);
+  const report = {
+    catalogUrl: catalogUrl.href,
+    checkedAt: new Date().toISOString(),
+    summary: {
+      catalogItems: catalogItems.length,
+      streamsChecked: checks.length,
+      working: checks.filter((check) => check.result.ok).length,
+      failing: checks.filter((check) => !check.result.ok).length,
+      byStatus: countBy(checks, (check) => check.result.status)
+    },
+    checks: checks.map((check) => ({
+      ok: check.result.ok,
+      status: check.result.status,
+      detail: check.result.detail,
+      channel: check.item?.name || "",
+      itemId: check.item?.id || "",
+      itemType: check.item?.type || "",
+      streamTitle: check.stream?.title || "",
+      streamEndpoint: check.streamEndpoint,
+      testedUrl: check.stream?.url || "",
+      finalUrl: check.result.finalUrl || "",
+      contentType: check.result.contentType || ""
+    }))
+  };
+
+  await fs.mkdir(path.dirname(resolved), { recursive: true });
+  await fs.writeFile(resolved, `${JSON.stringify(report, null, 2)}\n`);
+  console.log("");
+  console.log(`JSON report: ${resolved}`);
+}
+
 function countBy(items, keyFn) {
   return items.reduce((acc, item) => {
     const key = keyFn(item);
@@ -277,6 +316,9 @@ function parseArgs(argv) {
     } else if (arg === "--page-size") {
       parsed.pageSize = requireValue(arg, next);
       index += 1;
+    } else if (arg === "--json-out") {
+      parsed.jsonOut = requireValue(arg, next);
+      index += 1;
     } else if (!parsed.catalogUrl) {
       parsed.catalogUrl = arg;
     } else {
@@ -302,6 +344,7 @@ Options:
   --timeout MS          Per-request timeout. Default: 10000.
   --concurrency COUNT  Concurrent stream checks. Default: 8.
   --page-size COUNT    Catalog page size for pagination. Default: 100.
+  --json-out PATH      Write a structured JSON report for pruning/review.
 
 Fetches every catalog page, calls /stream/<type>/<id>.json for each item, tests
 each returned stream URL, and prints a command-line report.`);
